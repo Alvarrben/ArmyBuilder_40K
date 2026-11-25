@@ -1,0 +1,9 @@
+faction,unit,groupTitle,legends,range,label,models,points,desc,addon
+Chaos Space Marines,Chaos Bikers,OTHER,false,1st-2nd,Your Unit Costs,3 models,80,,
+Chaos Space Marines,Chaos Bikers,OTHER,false,1st-2nd,Your Unit Costs,6 models,150,,
+Chaos Space Marines,Chosen,OTHER,false,1st-2nd,Your 1st to 2nd Units Cost,10 models,280,,
+Chaos Space Marines,Chosen,OTHER,false,3rd+,Your 3rd+ Unit Costs,10 models,290,,
+Chaos Space Marines,Legionaries,BATTLELINE,false,all,Your Unit Costs,10 models,180,,
+Chaos Space Marines,Raptors,OTHER,false,1st-2nd,Your 1st to 2nd Units Cost,10 models,225,,
+Chaos Space Marines,Raptors,OTHER,false,3rd+,Your 3rd+ Unit Costs,10 models,235,,
+
