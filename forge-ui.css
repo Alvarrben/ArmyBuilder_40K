@@ -96,6 +96,19 @@ body { background: var(--bg); }
 .detachment-option:hover, .detachment-option.selected { border-color: var(--red); background: #292021; }
 .detachment-option b { color: #d98c85; }
 .help-dialog::backdrop { background: #000b; backdrop-filter: blur(2px); }
+.army-extra-controls { display: flex; align-items: end; gap: 12px; margin: 8px 0 14px; }
+.army-extra-controls[hidden] { display: none; }
+.army-extra-controls .control-group { width: min(280px, 60%); }
+.army-extra-controls small { color: var(--muted); font-size: 9px; padding-bottom: 10px; }
+.warlord-control { display: grid; gap: 5px; padding: 9px 13px; border-bottom: 1px solid var(--stroke); }
+.warlord-control span { color: var(--muted); font-size: 8px; letter-spacing: .8px; }
+.warlord-control select, .attachment-select { min-height: 29px; padding: 4px 7px; border: 1px solid var(--stroke); border-radius: 3px; background: #151619; color: var(--text); font-size: 9px; }
+.attachment-select { display: block; width: 100%; margin-top: 6px; }
+.validation-details { max-height: 90px; overflow: auto; margin: -4px 0 9px; padding-left: 17px; color: #e39a8f; font-size: 8px; line-height: 1.5; }
+.validation-details[hidden] { display: none; }
+.detachment-budget { display: flex; justify-content: space-between; align-items: center; color: var(--muted); font-size: 10px; padding: 4px 2px; }
+.detachment-option.selected { border-color: var(--green); background: #293326; }
+.add-unit:disabled { opacity: .35; cursor: not-allowed; }
 .toast { border-radius: 3px; }
 
 @media (max-width: 1100px) {
@@ -119,4 +132,3 @@ body { background: var(--bg); }
   .section-heading { gap: 8px; }
   .section-heading h2 { font-size: 18px; }
 }
-
