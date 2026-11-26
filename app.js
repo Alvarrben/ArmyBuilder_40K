@@ -1,6 +1,6 @@
 const STORAGE_KEY = 'forge40k.roster.v1';
 const numberFormat = new Intl.NumberFormat('es-ES');
-const state = { rows: [], roster: [], selectedFaction: 'Chaos Space Marines', category: 'all', search: '', battleSize: 2000, source: { version: '1.6', date: '22 oct 2026', label: 'MFM v1.6 · snapshot revisada' }, listName: 'La Decimotercera' };
+const state = { rows: [], roster: [], selectedFaction: 'Chaos Space Marines', category: 'all', search: '', battleSize: 2000, source: { version: '1.6', date: '22 oct 2026', label: 'MFM v1.6 · snapshot revisada' }, listName: 'La Decimotercera', factionCards: [], selectedDetachment: '' };
 const $ = (selector) => document.querySelector(selector);
 const escapeHtml = (value = '') => String(value).replace(/[&<>"']/g, (char) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[char]));
 
@@ -69,6 +69,39 @@ function selectedCost(unit, models, copyNumber) {
 
 function readUnit(unitName) { return groupedUnits().find((unit) => unit.name === unitName); }
 
+function availableDetachments() { return state.factionCards.filter((card) => card.kind === 'detachment'); }
+
+function selectedDetachment() { return availableDetachments().find((card) => card.name === state.selectedDetachment); }
+
+function enhancementsForDetachment() {
+  return (selectedDetachment()?.costs || []).filter((cost) => cost.type === 'enhancement' && Number.isFinite(cost.points));
+}
+
+function enhancementCost(label) { return enhancementsForDetachment().find((cost) => cost.label === label)?.points || 0; }
+
+function isCharacter(unitName) {
+  const category = readUnit(unitName)?.category || '';
+  return category.includes('CHARACTER') || category.includes('HQ');
+}
+
+function renderDetachment() {
+  const button = $('#detachmentButton'); const detachment = selectedDetachment();
+  button.innerHTML = detachment ? `${escapeHtml(detachment.name)} · ${numberFormat.format(detachment.detachmentPoints || 0)} DP <span>⌄</span>` : 'Seleccionar destacamento <span>⌄</span>';
+  const summary = $('#detachmentSummary');
+  if (!detachment) { summary.hidden = true; summary.innerHTML = ''; return; }
+  const enhancements = enhancementsForDetachment();
+  summary.hidden = false;
+  summary.innerHTML = `<div class="detachment-summary-head"><strong>${escapeHtml(detachment.name)}</strong><span>${numberFormat.format(detachment.detachmentPoints || 0)} DP</span></div><p>${enhancements.length ? `${numberFormat.format(enhancements.length)} mejoras disponibles. Asigna una a cada personaje desde tu lista.` : 'Este destacamento no tiene mejoras con coste en el catálogo.'} Los DP se muestran aparte y no cuentan como puntos de ejército.</p>`;
+}
+
+function chooseDetachment() {
+  const options = availableDetachments();
+  if (!options.length) { toast('No hay destacamentos disponibles para esta facción en el snapshot cargado.'); return; }
+  const dialog = $('#detachmentDialog');
+  $('#detachmentOptions').innerHTML = options.map((card) => `<button type="button" class="detachment-option ${card.name === state.selectedDetachment ? 'selected' : ''}" data-detachment="${escapeHtml(card.name)}"><span><strong>${escapeHtml(card.name)}</strong><small>${numberFormat.format(card.costs.filter((cost) => cost.type === 'enhancement').length)} mejoras</small></span><b>${numberFormat.format(card.detachmentPoints || 0)} DP</b></button>`).join('');
+  dialog.showModal();
+}
+
 function renderFactionSelect() {
   const select = $('#factionSelect'); const available = factions();
   const sameFaction = available.find((faction) => faction.toLocaleLowerCase('es') === state.selectedFaction.toLocaleLowerCase('es'));
@@ -105,7 +138,7 @@ function rosterPoints() {
     const option = selectedCost(unit, entry.models, copy);
     entry.points = option?.points ?? entry.points;
     entry.range = option?.range ?? '';
-    return sum + (Number(entry.points) || 0);
+    return sum + (Number(entry.points) || 0) + enhancementCost(entry.enhancement);
   }, 0);
 }
 
@@ -117,7 +150,11 @@ function renderRoster() {
   $('#unitTotal').textContent = `${count} ${count === 1 ? 'unidad' : 'unidades'}`; $('#rosterCount').textContent = String(count);
   $('#rosterEmpty').hidden = count > 0; $('#rosterItems').hidden = count === 0;
   $('#sidebarPoints').textContent = numberFormat.format(total);
-  $('#rosterItems').innerHTML = state.roster.map((entry, index) => `<article class="roster-item"><div class="unit-symbol">${['✣', '◉', '⌖', '✦'][index % 4]}</div><div><div class="roster-item-title">${escapeHtml(entry.unit)}</div><div class="roster-item-sub">${escapeHtml(entry.models)}${entry.range ? ` · ${escapeHtml(entry.range)}` : ''}</div></div><div class="roster-item-cost">${numberFormat.format(entry.points)}<small style="font:500 8px var(--font);color:#819083"> pts</small></div><button class="remove-unit" data-remove="${index}" aria-label="Quitar ${escapeHtml(entry.unit)}">×</button></article>`).join('');
+  const assigned = new Set(state.roster.map((entry) => entry.enhancement).filter(Boolean));
+  $('#rosterItems').innerHTML = state.roster.map((entry, index) => {
+    const enhancementSelect = selectedDetachment() && isCharacter(entry.unit) ? `<select class="enhancement-select" data-enhancement-index="${index}" aria-label="Mejora para ${escapeHtml(entry.unit)}"><option value="">Sin mejora</option>${enhancementsForDetachment().filter((cost) => !assigned.has(cost.label) || cost.label === entry.enhancement).map((cost) => `<option value="${escapeHtml(cost.label)}" ${cost.label === entry.enhancement ? 'selected' : ''}>${escapeHtml(cost.label)} · ${numberFormat.format(cost.points)} pts</option>`).join('')}</select>` : entry.enhancement ? `<div class="roster-item-sub">${escapeHtml(entry.enhancement)} · ${numberFormat.format(enhancementCost(entry.enhancement))} pts</div>` : '';
+    return `<article class="roster-item"><div class="unit-symbol">${['✣', '◉', '⌖', '✦'][index % 4]}</div><div class="roster-item-main"><div class="roster-item-title">${escapeHtml(entry.unit)}</div><div class="roster-item-sub">${escapeHtml(entry.models)}${entry.range ? ` · ${escapeHtml(entry.range)}` : ''}</div>${enhancementSelect}</div><div class="roster-item-cost">${numberFormat.format((Number(entry.points) || 0) + enhancementCost(entry.enhancement))}<small style="font:500 8px var(--font);color:#819083"> pts</small></div><button class="remove-unit" data-remove="${index}" aria-label="Quitar ${escapeHtml(entry.unit)}">×</button></article>`;
+  }).join('');
   const validity = $('#validity');
   validity.classList.toggle('valid', count > 0 && total <= limit); validity.classList.toggle('over', total > limit);
   validity.lastElementChild.textContent = total > limit ? 'Supera el límite de puntos' : count ? 'Lista dentro del límite' : 'Lista en progreso';
@@ -126,11 +163,11 @@ function renderRoster() {
 }
 
 function save() {
-  const payload = { roster: state.roster, selectedFaction: state.selectedFaction, battleSize: state.battleSize, listName: state.listName };
+  const payload = { roster: state.roster, selectedFaction: state.selectedFaction, battleSize: state.battleSize, listName: state.listName, selectedDetachment: state.selectedDetachment };
   localStorage.setItem(STORAGE_KEY, JSON.stringify(payload));
 }
 
-function render() { renderFactionSelect(); renderUnits(); renderRoster(); }
+function render() { renderFactionSelect(); renderUnits(); renderDetachment(); renderRoster(); }
 
 function toast(message) {
   const el = $('#toast'); el.textContent = message; el.classList.add('visible');
@@ -151,17 +188,20 @@ function download(filename, text, type) {
 }
 
 function exportRoster() {
-  const payload = { game: 'Warhammer 40,000', edition: 11, name: state.listName, faction: state.selectedFaction, battleSize: state.battleSize, points: rosterPoints(), source: state.source, units: state.roster };
+  const payload = { game: 'Warhammer 40,000', edition: 11, name: state.listName, faction: state.selectedFaction, battleSize: state.battleSize, detachment: selectedDetachment() ? { name: selectedDetachment().name, detachmentPoints: selectedDetachment().detachmentPoints } : null, points: rosterPoints(), source: state.source, units: state.roster };
   download(`${state.listName.trim().replace(/[^\p{L}\p{N}-]+/gu, '-').toLowerCase() || 'lista'}-forge.json`, JSON.stringify(payload, null, 2), 'application/json');
   toast('Lista exportada en formato JSON');
 }
 
-function setData(text, source) {
+function setData(text, source, factionCards = []) {
   const normalized = normalizeRows(parseCsv(text));
   if (!normalized.length) throw new Error('No se encontraron filas válidas. Revisa que sea el CSV de puntos del MFM.');
   state.rows = normalized;
   state.roster = state.roster.filter((entry) => normalized.some((row) => row.faction === state.selectedFaction && row.unit === entry.unit));
-  state.source = source; render(); save();
+  state.source = source; state.factionCards = factionCards;
+  if (!availableDetachments().some((card) => card.name === state.selectedDetachment)) state.selectedDetachment = '';
+  state.roster.forEach((entry) => { if (!enhancementsForDetachment().some((cost) => cost.label === entry.enhancement)) entry.enhancement = ''; });
+  render(); save();
   $('#sourceText').textContent = `Puntos de unidad desde ${source.label}. La extracción completa incluye wargear, mejoras y destacamentos en data/mfm-snapshot.json y data/mfm-points.csv.`;
   toast(`Catálogo cargado: ${numberFormat.format(normalized.length)} entradas`);
 }
@@ -177,7 +217,7 @@ async function updateFromMfm() {
     if (!csvResponse.ok || !snapshotResponse.ok) throw new Error('Primero ejecuta node scripts/scrape-mfm.mjs para generar el snapshot.');
     const [csv, snapshot] = await Promise.all([csvResponse.text(), snapshotResponse.json()]);
     const date = snapshot.scrapedAt?.slice(0, 10) || 'sin fecha';
-    setData(csv, { version: snapshot.manualVersion || 'unknown', date, label: `${snapshot.manualVersion || 'MFM'} · scrape ${date}` });
+    setData(csv, { version: snapshot.manualVersion || 'unknown', date, label: `${snapshot.manualVersion || 'MFM'} · scrape ${date}` }, snapshot.factions.find((faction) => faction.name.toLocaleLowerCase('es') === state.selectedFaction.toLocaleLowerCase('es'))?.cards || []);
   } catch (error) {
     toast(`${error.message} Puedes importar un CSV desde tu dispositivo.`);
   }
@@ -189,22 +229,28 @@ function init() {
   if (saved.roster) state.roster = saved.roster;
   if (saved.selectedFaction) state.selectedFaction = saved.selectedFaction;
   if (saved.battleSize) state.battleSize = saved.battleSize;
+  if (saved.selectedDetachment) state.selectedDetachment = saved.selectedDetachment;
   $('#listName').value = state.listName; $('#battleSize').value = String(state.battleSize);
   Promise.all([fetch('./data/mfm-points.csv'), fetch('./data/mfm-snapshot.json')]).then(async ([csvResponse, snapshotResponse]) => {
     if (!csvResponse.ok || !snapshotResponse.ok) throw new Error('Snapshot scrapeado todavía no disponible.');
     const [csv, snapshot] = await Promise.all([csvResponse.text(), snapshotResponse.json()]);
     const date = snapshot.scrapedAt?.slice(0, 10) || 'sin fecha';
-    setData(csv, { version: snapshot.manualVersion || 'unknown', date, label: `${snapshot.manualVersion || 'MFM'} · scrape ${date}` });
+    setData(csv, { version: snapshot.manualVersion || 'unknown', date, label: `${snapshot.manualVersion || 'MFM'} · scrape ${date}` }, snapshot.factions.find((faction) => faction.name.toLocaleLowerCase('es') === state.selectedFaction.toLocaleLowerCase('es'))?.cards || []);
   }).catch(() => fetch('./data/points.csv').then((response) => response.text()).then((csv) => setData(csv, state.source)).catch(() => {
     state.rows = normalizeRows(parseCsv(`faction,unit,groupTitle,legends,range,label,models,points\nChaos Space Marines,Chaos Bikers,OTHER,false,1st-2nd,Your Unit Costs,3 models,80`)); render();
   }));
   $('#listName').addEventListener('input', (event) => { state.listName = event.target.value || 'Lista sin nombre'; save(); renderRoster(); });
-  $('#factionSelect').addEventListener('change', (event) => { state.selectedFaction = event.target.value; state.roster = []; save(); render(); });
+  $('#factionSelect').addEventListener('change', async (event) => {
+    state.selectedFaction = event.target.value; state.roster = []; state.selectedDetachment = ''; state.factionCards = [];
+    try { const response = await fetch('./data/mfm-snapshot.json'); const snapshot = await response.json(); state.factionCards = snapshot.factions.find((faction) => faction.name.toLocaleLowerCase('es') === state.selectedFaction.toLocaleLowerCase('es'))?.cards || []; } catch {}
+    save(); render();
+  });
   $('#battleSize').addEventListener('change', (event) => { state.battleSize = Number(event.target.value); save(); renderRoster(); });
   $('#unitSearch').addEventListener('input', (event) => { state.search = event.target.value; renderUnits(); });
   $('#categoryTabs').addEventListener('click', (event) => { const tab = event.target.closest('[data-category]'); if (!tab) return; state.category = tab.dataset.category; document.querySelectorAll('.category-tab').forEach((button) => button.classList.toggle('selected', button === tab)); renderUnits(); });
   $('#unitsList').addEventListener('click', (event) => { const button = event.target.closest('[data-add]'); if (!button) return; const card = button.closest('.unit-card'); addUnit(button.dataset.add, card.querySelector('.size-select')?.value); });
   $('#rosterItems').addEventListener('click', (event) => { const button = event.target.closest('[data-remove]'); if (!button) return; state.roster.splice(Number(button.dataset.remove), 1); save(); renderRoster(); });
+  $('#rosterItems').addEventListener('change', (event) => { const select = event.target.closest('[data-enhancement-index]'); if (!select) return; const entry = state.roster[Number(select.dataset.enhancementIndex)]; if (!entry) return; entry.enhancement = select.value; save(); renderRoster(); });
   $('#clearRoster').addEventListener('click', () => { if (!state.roster.length) return; state.roster = []; save(); renderRoster(); toast('Roster vaciado'); });
   $('#exportButton').addEventListener('click', exportRoster);
   $('#importButton').addEventListener('click', openImportMenu);
@@ -214,8 +260,9 @@ function init() {
   $('#topAddButton').addEventListener('click', () => $('#unitSearch').focus()); $('#emptyAddButton').addEventListener('click', () => { $('#addUnits').scrollIntoView({ behavior: 'smooth' }); $('#unitSearch').focus(); });
   $('#sourceLink').addEventListener('click', () => window.open('https://mfm.warhammer-community.com/en', '_blank', 'noopener,noreferrer'));
   $('#helpButton').addEventListener('click', () => $('#helpDialog').showModal());
-  $('#newArmyButton').addEventListener('click', () => { state.listName = 'Nueva lista'; state.roster = []; $('#listName').value = state.listName; save(); renderRoster(); toast('Nueva lista preparada'); });
-  $('#detachmentButton').addEventListener('click', () => toast('La selección de destacamento llegará con el catálogo completo.'));
+  $('#newArmyButton').addEventListener('click', () => { state.listName = 'Nueva lista'; state.roster = []; state.selectedDetachment = ''; $('#listName').value = state.listName; save(); render(); toast('Nueva lista preparada'); });
+  $('#detachmentButton').addEventListener('click', chooseDetachment);
+  $('#detachmentOptions').addEventListener('click', (event) => { const option = event.target.closest('[data-detachment]'); if (!option) return; state.selectedDetachment = option.dataset.detachment; state.roster.forEach((entry) => { if (!enhancementsForDetachment().some((cost) => cost.label === entry.enhancement)) entry.enhancement = ''; }); $('#detachmentDialog').close(); save(); render(); toast(`Destacamento ${state.selectedDetachment} seleccionado`); });
   $('#filterButton').addEventListener('click', () => toast('Elige una categoría con las pestañas del arsenal.'));
   $('#listMenuButton').addEventListener('click', exportRoster); $('#rosterMenuButton').addEventListener('click', exportRoster);
   document.addEventListener('keydown', (event) => { if (event.key === '/' && !['INPUT', 'SELECT', 'TEXTAREA'].includes(document.activeElement.tagName)) { event.preventDefault(); $('#unitSearch').focus(); } });
