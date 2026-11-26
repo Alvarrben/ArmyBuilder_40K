@@ -1,6 +1,6 @@
 const STORAGE_KEY = 'forge40k.roster.v1';
 const numberFormat = new Intl.NumberFormat('es-ES');
-const state = { rows: [], roster: [], selectedFaction: 'Chaos Space Marines', category: 'all', search: '', battleSize: 2000, source: { version: '1.6', date: '22 oct 2026', label: 'MFM v1.6 · snapshot revisada' }, listName: 'La Decimotercera', factionCards: [], selectedDetachment: '' };
+const state = { rows: [], roster: [], selectedFaction: 'Chaos Space Marines', category: 'all', search: '', battleSize: 2000, source: { version: '1.6', date: '22 oct 2026', label: 'MFM v1.6 · snapshot revisada' }, listName: 'La Decimotercera', factionCards: [], selectedDetachments: [], selectedDisposition: '', warlordId: '', validationMessages: [] };
 const $ = (selector) => document.querySelector(selector);
 const escapeHtml = (value = '') => String(value).replace(/[&<>"']/g, (char) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[char]));
 
@@ -31,7 +31,10 @@ function normalizeRows(rows) {
     legends: String(row.legends).toLowerCase() === 'true', range: row.range || '',
     label: row.label || '', models: row.models || row.modelcount || '1 model',
     points: String(row.points || '').trim() ? Number(String(row.points).replace(/[^0-9.-]/g, '')) : Number.NaN,
-    desc: row.desc || '', addon: row.addon || ''
+    desc: row.desc || '', addon: row.addon || '',
+    isLeader: /\bLEADER\b/i.test(row.desc || ''), isSupport: /\bSUPPORT\b/i.test(row.desc || ''),
+    isEpicHero: /\bEPIC HERO\b/i.test(row.desc || ''),
+    canJoin: ((row.desc || '').split(/\b(?:LEADER|SUPPORT)\b\s*\|?/i).slice(1).join('|').split('|')[0] || '').split(/,\s*/).map((name) => name.trim()).filter(Boolean)
   })).filter((row, index) => {
     const original = rows[index];
     return row.faction && row.unit && Number.isFinite(row.points) && (!original.recordtype || original.recordtype === 'unit');
@@ -71,35 +74,79 @@ function readUnit(unitName) { return groupedUnits().find((unit) => unit.name ===
 
 function availableDetachments() { return state.factionCards.filter((card) => card.kind === 'detachment'); }
 
-function selectedDetachment() { return availableDetachments().find((card) => card.name === state.selectedDetachment); }
+function selectedDetachments() { return availableDetachments().filter((card) => state.selectedDetachments.includes(card.name)); }
 
 function enhancementsForDetachment() {
-  return (selectedDetachment()?.costs || []).filter((cost) => cost.type === 'enhancement' && Number.isFinite(cost.points));
+  return selectedDetachments().flatMap((detachment) => (detachment.costs || []).filter((cost) => cost.type === 'enhancement' && Number.isFinite(cost.points)).map((cost) => ({ ...cost, detachment: detachment.name, upgrade: /\(upgrade\)/i.test(cost.label) })));
 }
 
 function enhancementCost(label) { return enhancementsForDetachment().find((cost) => cost.label === label)?.points || 0; }
 
-function isCharacter(unitName) {
-  const category = readUnit(unitName)?.category || '';
-  return category.includes('CHARACTER') || category.includes('HQ');
+function battleLimits() { return state.battleSize <= 1000 ? { points: 1000, dp: 2, enhancements: 2, units: 2 } : { points: 2000, dp: 3, enhancements: 4, units: 3 }; }
+function detachmentPoints() { return selectedDetachments().reduce((sum, card) => sum + (Number(card.detachmentPoints) || 0), 0); }
+function forceDispositions() { const known = ['TAKE AND HOLD', 'PURGE THE FOE', 'DISRUPTION', 'RECONNAISSANCE', 'PRIORITY ASSETS']; return [...new Set(selectedDetachments().flatMap((card) => card.text || []).map((line) => line.toUpperCase()).filter((line) => known.includes(line)))]; }
+function unitMeta(unitName) { const unit = readUnit(unitName); return unit?.options[0] || {}; }
+function isCharacter(unitName) { const unit = readUnit(unitName); return Boolean(unit?.category.includes('CHARACTER') || unit?.category.includes('HQ') || unit?.options.some((option) => option.isLeader || option.isSupport)); }
+function isEpicHero(unitName) { return unitMeta(unitName).isEpicHero; }
+function isWarlordEligible(unitName) { return isCharacter(unitName); }
+function roleOf(unit) { return unit.options.some((option) => option.category.includes('BATTLELINE') || option.category.includes('TROOPS')) ? 'BATTLELINE' : unit.options.some((option) => option.category.includes('DEDICATED TRANSPORT')) ? 'DEDICATED TRANSPORT' : ''; }
+function maxCopies(unitName) { const role = roleOf(readUnit(unitName) || { options: [] }); return role === 'BATTLELINE' || role === 'DEDICATED TRANSPORT' ? battleLimits().units * 2 : isEpicHero(unitName) ? 1 : battleLimits().units; }
+function enhancementCount() { return state.roster.filter((entry) => entry.enhancement).length; }
+function rosterProblems() {
+  const problems = []; const limit = battleLimits(); const dp = detachmentPoints();
+  if (state.roster.length && !selectedDetachments().length) problems.push('Selecciona al menos un destacamento para la facción.');
+  const incursionException = state.battleSize <= 1000 && selectedDetachments().length === 1 && dp === 3;
+  if (dp > limit.dp && !incursionException) problems.push(`Destacamentos: ${dp}/${limit.dp} DP.`);
+  const names = [...new Set(state.roster.map((entry) => entry.unit))];
+  names.forEach((name) => { const count = state.roster.filter((entry) => entry.unit === name).length; if (count > maxCopies(name)) problems.push(`${name}: ${count}/${maxCopies(name)} unidades.`); });
+  const enhancementNames = state.roster.map((entry) => entry.enhancement).filter(Boolean);
+  const countedUpgrades = new Set(); let enhancementTotal = 0;
+  state.roster.forEach((entry) => {
+    if (!entry.enhancement) return;
+    const upgrade = enhancementsForDetachment().find((cost) => cost.label === entry.enhancement)?.upgrade;
+    if (upgrade) { if (!countedUpgrades.has(entry.enhancement)) { countedUpgrades.add(entry.enhancement); enhancementTotal += 1; } }
+    else enhancementTotal += 1;
+  });
+  if (enhancementTotal > limit.enhancements) problems.push(`Mejoras: ${enhancementTotal}/${limit.enhancements}.`);
+  enhancementNames.forEach((name) => { const cost = enhancementsForDetachment().find((item) => item.label === name); const copies = enhancementNames.filter((item) => item === name).length; if (cost?.upgrade ? copies > 3 : copies > 1) problems.push(`${name}: ${cost?.upgrade ? 'máximo 3 copias' : 'no se puede repetir'}.`); });
+  const attachedEnhancements = new Map();
+  state.roster.forEach((entry) => { if (entry.enhancement) { const group = entry.attachedTo || entry.id; attachedEnhancements.set(group, [...(attachedEnhancements.get(group) || []), entry.unit]); } });
+  attachedEnhancements.forEach((units) => { if (units.length > 1) problems.push(`${units.join(', ')} forman una unidad adjunta con más de una mejora.`); });
+  if (!state.warlordId || !state.roster.some((entry) => entry.id === state.warlordId && isWarlordEligible(entry.unit))) problems.push('Selecciona un Warlord válido (Personaje de la facción).');
+  state.roster.filter((entry) => unitMeta(entry.unit).isSupport || unitMeta(entry.unit).isLeader && entry.attachedTo).forEach((entry) => {
+    const meta = unitMeta(entry.unit); const target = state.roster.find((candidate) => candidate.id === entry.attachedTo);
+    const valid = target && !unitMeta(target.unit).isLeader && !unitMeta(target.unit).isSupport && (!meta.canJoin.length || meta.canJoin.some((name) => name.toLocaleLowerCase('es') === target.unit.toLocaleLowerCase('es')));
+    if (meta.isSupport && !valid) problems.push(`${entry.unit} debe unirse a una unidad compatible.`);
+    else if (entry.attachedTo && !valid) problems.push(`${entry.unit} no puede unirse a esa unidad según el MFM.`);
+  });
+  return problems;
 }
 
 function renderDetachment() {
-  const button = $('#detachmentButton'); const detachment = selectedDetachment();
-  button.innerHTML = detachment ? `${escapeHtml(detachment.name)} · ${numberFormat.format(detachment.detachmentPoints || 0)} DP <span>⌄</span>` : 'Seleccionar destacamento <span>⌄</span>';
+  const button = $('#detachmentButton'); const detachments = selectedDetachments();
+  button.innerHTML = detachments.length ? `${detachments.length} destacamento(s) · ${detachmentPoints()}/${battleLimits().dp} DP <span>⌄</span>` : 'Seleccionar destacamentos <span>⌄</span>';
   const summary = $('#detachmentSummary');
-  if (!detachment) { summary.hidden = true; summary.innerHTML = ''; return; }
+  if (!detachments.length) { summary.hidden = true; summary.innerHTML = ''; renderDisposition(); return; }
   const enhancements = enhancementsForDetachment();
   summary.hidden = false;
-  summary.innerHTML = `<div class="detachment-summary-head"><strong>${escapeHtml(detachment.name)}</strong><span>${numberFormat.format(detachment.detachmentPoints || 0)} DP</span></div><p>${enhancements.length ? `${numberFormat.format(enhancements.length)} mejoras disponibles. Asigna una a cada personaje desde tu lista.` : 'Este destacamento no tiene mejoras con coste en el catálogo.'} Los DP se muestran aparte y no cuentan como puntos de ejército.</p>`;
+  summary.innerHTML = `<div class="detachment-summary-head"><strong>${detachments.map((card) => escapeHtml(card.name)).join(' + ')}</strong><span>${detachmentPoints()}/${battleLimits().dp} DP</span></div><p>${enhancements.length} mejoras disponibles entre los destacamentos elegidos. Los DP no cuentan como puntos de ejército.${state.battleSize <= 1000 && detachments.length === 1 && detachmentPoints() === 3 ? ' Excepción Incursion: destacamento único de 3 DP.' : ''}</p>`;
+  renderDisposition();
+}
+
+function renderDisposition() {
+  const select = $('#forceDisposition'); if (!select) return;
+  const options = forceDispositions();
+  if (!options.includes(state.selectedDisposition)) state.selectedDisposition = options[0] || '';
+  select.innerHTML = `<option value="">Elegir para la partida…</option>${options.map((item) => `<option value="${escapeHtml(item)}" ${item === state.selectedDisposition ? 'selected' : ''}>${escapeHtml(item)}</option>`).join('')}`;
+  $('#dispositionControl').hidden = !options.length;
 }
 
 function chooseDetachment() {
   const options = availableDetachments();
   if (!options.length) { toast('No hay destacamentos disponibles para esta facción en el snapshot cargado.'); return; }
   const dialog = $('#detachmentDialog');
-  $('#detachmentOptions').innerHTML = options.map((card) => `<button type="button" class="detachment-option ${card.name === state.selectedDetachment ? 'selected' : ''}" data-detachment="${escapeHtml(card.name)}"><span><strong>${escapeHtml(card.name)}</strong><small>${numberFormat.format(card.costs.filter((cost) => cost.type === 'enhancement').length)} mejoras</small></span><b>${numberFormat.format(card.detachmentPoints || 0)} DP</b></button>`).join('');
-  dialog.showModal();
+  $('#detachmentOptions').innerHTML = `<div class="detachment-budget">Presupuesto: ${detachmentPoints()}/${battleLimits().dp} DP <button type="button" class="text-button" data-clear-detachments>Limpiar</button></div>${options.map((card) => `<button type="button" class="detachment-option ${state.selectedDetachments.includes(card.name) ? 'selected' : ''}" data-detachment="${escapeHtml(card.name)}"><span><strong>${escapeHtml(card.name)}</strong><small>${numberFormat.format(card.costs.filter((cost) => cost.type === 'enhancement').length)} mejoras</small></span><b>${numberFormat.format(card.detachmentPoints || 0)} DP ${state.selectedDetachments.includes(card.name) ? '✓' : '+'}</b></button>`).join('')}`;
+  if (!dialog.open) dialog.showModal();
 }
 
 function renderFactionSelect() {
@@ -114,8 +161,8 @@ function renderFactionSelect() {
 function categoryMatches(unit) {
   if (state.category === 'all') return true;
   if (state.category === 'BATTLELINE') return unit.category.includes('BATTLELINE') || unit.category.includes('TROOPS');
-  if (state.category === 'CHARACTERS') return unit.category.includes('CHARACTER') || unit.category.includes('HQ');
-  return !unit.category.includes('BATTLELINE') && !unit.category.includes('TROOPS') && !unit.category.includes('CHARACTER') && !unit.category.includes('HQ');
+  if (state.category === 'CHARACTERS') return isCharacter(unit.name);
+  return !unit.category.includes('BATTLELINE') && !unit.category.includes('TROOPS') && !isCharacter(unit.name);
 }
 
 function renderUnits() {
@@ -125,8 +172,9 @@ function renderUnits() {
   $('#unitsList').innerHTML = units.length ? units.map((unit, index) => {
     const models = [...new Set(unit.options.map((option) => option.models))];
     const bestOption = unit.options[0];
-    const role = unit.category.includes('CHARACTER') || unit.category.includes('HQ') ? 'PERSONAJE' : unit.category.includes('BATTLELINE') ? 'LÍNEA' : 'UNIDAD';
-    return `<article class="unit-card" data-unit="${escapeHtml(unit.name)}"><div class="unit-symbol ${role === 'PERSONAJE' ? 'character' : ''}">${role === 'PERSONAJE' ? '♟' : ['✣', '◉', '⌖', '✦'][index % 4]}</div><div class="unit-info"><div class="unit-name">${escapeHtml(unit.name)}</div><div class="unit-meta"><span class="role-tag">${role}</span><span>${models.map((model) => escapeHtml(model)).join(' · ')}</span></div></div><div class="unit-point">${numberFormat.format(bestOption.points)}<small>pts</small></div><select class="size-select" aria-label="Tamaño de ${escapeHtml(unit.name)}">${models.map((model) => { const option = unit.options.find((entry) => entry.models === model) || bestOption; return `<option value="${escapeHtml(model)}">${escapeHtml(model.replace(/ models?/i, ''))} · ${numberFormat.format(option.points)}</option>`; }).join('')}</select><button class="add-unit" data-add="${escapeHtml(unit.name)}" title="Añadir ${escapeHtml(unit.name)}" aria-label="Añadir ${escapeHtml(unit.name)}">＋</button></article>`;
+    const character = isCharacter(unit.name); const role = character ? 'PERSONAJE' : unit.category.includes('BATTLELINE') ? 'LÍNEA' : unit.category.includes('DEDICATED TRANSPORT') ? 'TRANSPORTE' : 'UNIDAD';
+    const copies = state.roster.filter((entry) => entry.unit === unit.name).length; const max = maxCopies(unit.name);
+    return `<article class="unit-card" data-unit="${escapeHtml(unit.name)}"><div class="unit-symbol ${character ? 'character' : ''}">${character ? '♟' : ['✣', '◉', '⌖', '✦'][index % 4]}</div><div class="unit-info"><div class="unit-name">${escapeHtml(unit.name)}</div><div class="unit-meta"><span class="role-tag">${role}</span><span>${models.map((model) => escapeHtml(model)).join(' · ')}</span><span>${copies}/${max}</span></div></div><div class="unit-point">${numberFormat.format(bestOption.points)}<small>pts</small></div><select class="size-select" aria-label="Tamaño de ${escapeHtml(unit.name)}">${models.map((model) => { const option = unit.options.find((entry) => entry.models === model) || bestOption; return `<option value="${escapeHtml(model)}">${escapeHtml(model.replace(/ models?/i, ''))} · ${numberFormat.format(option.points)}</option>`; }).join('')}</select><button class="add-unit" data-add="${escapeHtml(unit.name)}" title="Añadir ${escapeHtml(unit.name)}" aria-label="Añadir ${escapeHtml(unit.name)}" ${copies >= max ? 'disabled' : ''}>＋</button></article>`;
   }).join('') : `<div class="empty-catalogue">No hay unidades que coincidan. Importa un catálogo MFM completo o prueba otro filtro.</div>`;
 }
 
@@ -150,20 +198,29 @@ function renderRoster() {
   $('#unitTotal').textContent = `${count} ${count === 1 ? 'unidad' : 'unidades'}`; $('#rosterCount').textContent = String(count);
   $('#rosterEmpty').hidden = count > 0; $('#rosterItems').hidden = count === 0;
   $('#sidebarPoints').textContent = numberFormat.format(total);
-  const assigned = new Set(state.roster.map((entry) => entry.enhancement).filter(Boolean));
+  const assigned = state.roster.map((entry) => entry.enhancement).filter(Boolean);
+  const warlordSelect = $('#warlordSelect');
+  if (warlordSelect) warlordSelect.innerHTML = `<option value="">Designar Warlord…</option>${state.roster.filter((entry) => isWarlordEligible(entry.unit)).map((entry) => `<option value="${escapeHtml(entry.id)}" ${state.warlordId === entry.id ? 'selected' : ''}>${escapeHtml(entry.unit)}</option>`).join('')}`;
   $('#rosterItems').innerHTML = state.roster.map((entry, index) => {
-    const enhancementSelect = selectedDetachment() && isCharacter(entry.unit) ? `<select class="enhancement-select" data-enhancement-index="${index}" aria-label="Mejora para ${escapeHtml(entry.unit)}"><option value="">Sin mejora</option>${enhancementsForDetachment().filter((cost) => !assigned.has(cost.label) || cost.label === entry.enhancement).map((cost) => `<option value="${escapeHtml(cost.label)}" ${cost.label === entry.enhancement ? 'selected' : ''}>${escapeHtml(cost.label)} · ${numberFormat.format(cost.points)} pts</option>`).join('')}</select>` : entry.enhancement ? `<div class="roster-item-sub">${escapeHtml(entry.enhancement)} · ${numberFormat.format(enhancementCost(entry.enhancement))} pts</div>` : '';
-    return `<article class="roster-item"><div class="unit-symbol">${['✣', '◉', '⌖', '✦'][index % 4]}</div><div class="roster-item-main"><div class="roster-item-title">${escapeHtml(entry.unit)}</div><div class="roster-item-sub">${escapeHtml(entry.models)}${entry.range ? ` · ${escapeHtml(entry.range)}` : ''}</div>${enhancementSelect}</div><div class="roster-item-cost">${numberFormat.format((Number(entry.points) || 0) + enhancementCost(entry.enhancement))}<small style="font:500 8px var(--font);color:#819083"> pts</small></div><button class="remove-unit" data-remove="${index}" aria-label="Quitar ${escapeHtml(entry.unit)}">×</button></article>`;
+    const canEnhance = isCharacter(entry.unit) && !isEpicHero(entry.unit);
+    const enhancementTotal = new Set(assigned).size; const hasRoom = enhancementTotal < battleLimits().enhancements || Boolean(entry.enhancement);
+    const allowedEnhancements = enhancementsForDetachment().filter((cost) => (!assigned.includes(cost.label) || cost.label === entry.enhancement || (cost.upgrade && assigned.filter((label) => label === cost.label).length < 3)) && (hasRoom || cost.label === entry.enhancement));
+    const enhancementSelect = selectedDetachments().length && (canEnhance || enhancementsForDetachment().some((cost) => cost.upgrade)) ? `<select class="enhancement-select" data-enhancement-index="${index}" aria-label="Mejora para ${escapeHtml(entry.unit)}"><option value="">Sin mejora</option>${allowedEnhancements.filter((cost) => canEnhance || cost.upgrade).map((cost) => `<option value="${escapeHtml(cost.label)}" ${cost.label === entry.enhancement ? 'selected' : ''}>${escapeHtml(cost.label)} · ${numberFormat.format(cost.points)} pts</option>`).join('')}</select>` : entry.enhancement ? `<div class="roster-item-sub">${escapeHtml(entry.enhancement)} · ${numberFormat.format(enhancementCost(entry.enhancement))} pts</div>` : '';
+    const meta = unitMeta(entry.unit); const targets = state.roster.filter((candidate) => candidate.id !== entry.id && !unitMeta(candidate.unit).isLeader && !unitMeta(candidate.unit).isSupport && (!meta.canJoin.length || meta.canJoin.some((name) => name.toLocaleLowerCase('es') === candidate.unit.toLocaleLowerCase('es'))));
+    const attachment = (meta.isLeader || meta.isSupport) ? `<select class="attachment-select" data-attach-index="${index}" aria-label="Asignar ${escapeHtml(entry.unit)}"><option value="">${meta.isSupport ? 'Asignar unidad de apoyo…' : 'Sin unidad asignada'}</option>${targets.map((target) => `<option value="${escapeHtml(target.id)}" ${entry.attachedTo === target.id ? 'selected' : ''}>Se une a ${escapeHtml(target.unit)}</option>`).join('')}</select>` : '';
+    return `<article class="roster-item"><div class="unit-symbol ${isCharacter(entry.unit) ? 'character' : ''}">${['✣', '◉', '⌖', '✦'][index % 4]}</div><div class="roster-item-main"><div class="roster-item-title">${escapeHtml(entry.unit)}${state.warlordId === entry.id ? ' · WARLORD' : ''}</div><div class="roster-item-sub">${escapeHtml(entry.models)}${entry.range ? ` · ${escapeHtml(entry.range)}` : ''}</div>${attachment}${enhancementSelect}</div><div class="roster-item-cost">${numberFormat.format((Number(entry.points) || 0) + enhancementCost(entry.enhancement))}<small style="font:500 8px var(--font);color:#819083"> pts</small></div><button class="remove-unit" data-remove="${index}" aria-label="Quitar ${escapeHtml(entry.unit)}">×</button></article>`;
   }).join('');
   const validity = $('#validity');
-  validity.classList.toggle('valid', count > 0 && total <= limit); validity.classList.toggle('over', total > limit);
-  validity.lastElementChild.textContent = total > limit ? 'Supera el límite de puntos' : count ? 'Lista dentro del límite' : 'Lista en progreso';
+  const problems = rosterProblems(); state.validationMessages = problems;
+  validity.classList.toggle('valid', count > 0 && total <= limit && !problems.length); validity.classList.toggle('over', total > limit || problems.length > 0);
+  validity.lastElementChild.textContent = total > limit ? 'Supera el límite de puntos' : problems[0] || (count ? 'Lista dentro del límite' : 'Lista en progreso');
+  const details = $('#validationDetails'); details.hidden = !problems.length; details.innerHTML = problems.map((problem) => `<li>${escapeHtml(problem)}</li>`).join('');
   $('#sidebarArmyName').textContent = state.listName; $('#unitTotal').textContent = `${count} ${count === 1 ? 'unidad' : 'unidades'}`;
   save();
 }
 
 function save() {
-  const payload = { roster: state.roster, selectedFaction: state.selectedFaction, battleSize: state.battleSize, listName: state.listName, selectedDetachment: state.selectedDetachment };
+  const payload = { roster: state.roster, selectedFaction: state.selectedFaction, battleSize: state.battleSize, listName: state.listName, selectedDetachments: state.selectedDetachments, selectedDisposition: state.selectedDisposition, warlordId: state.warlordId };
   localStorage.setItem(STORAGE_KEY, JSON.stringify(payload));
 }
 
@@ -176,6 +233,8 @@ function toast(message) {
 
 function addUnit(name, models) {
   const unit = readUnit(name); if (!unit) return;
+  const copies = state.roster.filter((entry) => entry.unit === name).length;
+  if (copies >= maxCopies(name)) { toast(`Límite de ${maxCopies(name)} unidades para ${name}.`); return; }
   const selectedModels = models || unit.options[0].models;
   const initial = selectedCost(unit, selectedModels, state.roster.filter((entry) => entry.unit === name).length + 1);
   state.roster.push({ id: crypto.randomUUID?.() || `${Date.now()}-${Math.random()}`, unit: name, models: selectedModels, points: initial.points, range: initial.range });
@@ -188,7 +247,7 @@ function download(filename, text, type) {
 }
 
 function exportRoster() {
-  const payload = { game: 'Warhammer 40,000', edition: 11, name: state.listName, faction: state.selectedFaction, battleSize: state.battleSize, detachment: selectedDetachment() ? { name: selectedDetachment().name, detachmentPoints: selectedDetachment().detachmentPoints } : null, points: rosterPoints(), source: state.source, units: state.roster };
+  const payload = { game: 'Warhammer 40,000', edition: 11, name: state.listName, faction: state.selectedFaction, battleSize: state.battleSize, detachments: selectedDetachments().map(({ name, detachmentPoints: dp }) => ({ name, detachmentPoints: dp })), detachmentPoints: detachmentPoints(), forceDisposition: state.selectedDisposition, warlordId: state.warlordId, points: rosterPoints(), validation: rosterProblems(), source: state.source, units: state.roster };
   download(`${state.listName.trim().replace(/[^\p{L}\p{N}-]+/gu, '-').toLowerCase() || 'lista'}-forge.json`, JSON.stringify(payload, null, 2), 'application/json');
   toast('Lista exportada en formato JSON');
 }
@@ -199,7 +258,7 @@ function setData(text, source, factionCards = []) {
   state.rows = normalized;
   state.roster = state.roster.filter((entry) => normalized.some((row) => row.faction === state.selectedFaction && row.unit === entry.unit));
   state.source = source; state.factionCards = factionCards;
-  if (!availableDetachments().some((card) => card.name === state.selectedDetachment)) state.selectedDetachment = '';
+  state.selectedDetachments = state.selectedDetachments.filter((name) => availableDetachments().some((card) => card.name === name));
   state.roster.forEach((entry) => { if (!enhancementsForDetachment().some((cost) => cost.label === entry.enhancement)) entry.enhancement = ''; });
   render(); save();
   $('#sourceText').textContent = `Puntos de unidad desde ${source.label}. La extracción completa incluye wargear, mejoras y destacamentos en data/mfm-snapshot.json y data/mfm-points.csv.`;
@@ -229,7 +288,8 @@ function init() {
   if (saved.roster) state.roster = saved.roster;
   if (saved.selectedFaction) state.selectedFaction = saved.selectedFaction;
   if (saved.battleSize) state.battleSize = saved.battleSize;
-  if (saved.selectedDetachment) state.selectedDetachment = saved.selectedDetachment;
+  state.selectedDetachments = saved.selectedDetachments || (saved.selectedDetachment ? [saved.selectedDetachment] : []);
+  state.selectedDisposition = saved.selectedDisposition || ''; state.warlordId = saved.warlordId || '';
   $('#listName').value = state.listName; $('#battleSize').value = String(state.battleSize);
   Promise.all([fetch('./data/mfm-points.csv'), fetch('./data/mfm-snapshot.json')]).then(async ([csvResponse, snapshotResponse]) => {
     if (!csvResponse.ok || !snapshotResponse.ok) throw new Error('Snapshot scrapeado todavía no disponible.');
@@ -241,11 +301,11 @@ function init() {
   }));
   $('#listName').addEventListener('input', (event) => { state.listName = event.target.value || 'Lista sin nombre'; save(); renderRoster(); });
   $('#factionSelect').addEventListener('change', async (event) => {
-    state.selectedFaction = event.target.value; state.roster = []; state.selectedDetachment = ''; state.factionCards = [];
+    state.selectedFaction = event.target.value; state.roster = []; state.selectedDetachments = []; state.selectedDisposition = ''; state.warlordId = ''; state.factionCards = [];
     try { const response = await fetch('./data/mfm-snapshot.json'); const snapshot = await response.json(); state.factionCards = snapshot.factions.find((faction) => faction.name.toLocaleLowerCase('es') === state.selectedFaction.toLocaleLowerCase('es'))?.cards || []; } catch {}
     save(); render();
   });
-  $('#battleSize').addEventListener('change', (event) => { state.battleSize = Number(event.target.value); save(); renderRoster(); });
+  $('#battleSize').addEventListener('change', (event) => { state.battleSize = Number(event.target.value); save(); render(); });
   $('#unitSearch').addEventListener('input', (event) => { state.search = event.target.value; renderUnits(); });
   $('#categoryTabs').addEventListener('click', (event) => { const tab = event.target.closest('[data-category]'); if (!tab) return; state.category = tab.dataset.category; document.querySelectorAll('.category-tab').forEach((button) => button.classList.toggle('selected', button === tab)); renderUnits(); });
   $('#unitsList').addEventListener('click', (event) => { const button = event.target.closest('[data-add]'); if (!button) return; const card = button.closest('.unit-card'); addUnit(button.dataset.add, card.querySelector('.size-select')?.value); });
@@ -260,13 +320,26 @@ function init() {
   $('#topAddButton').addEventListener('click', () => $('#unitSearch').focus()); $('#emptyAddButton').addEventListener('click', () => { $('#addUnits').scrollIntoView({ behavior: 'smooth' }); $('#unitSearch').focus(); });
   $('#sourceLink').addEventListener('click', () => window.open('https://mfm.warhammer-community.com/en', '_blank', 'noopener,noreferrer'));
   $('#helpButton').addEventListener('click', () => $('#helpDialog').showModal());
-  $('#newArmyButton').addEventListener('click', () => { state.listName = 'Nueva lista'; state.roster = []; state.selectedDetachment = ''; $('#listName').value = state.listName; save(); render(); toast('Nueva lista preparada'); });
+  $('#newArmyButton').addEventListener('click', () => { state.listName = 'Nueva lista'; state.roster = []; state.selectedDetachments = []; state.selectedDisposition = ''; state.warlordId = ''; $('#listName').value = state.listName; save(); render(); toast('Nueva lista preparada'); });
   $('#detachmentButton').addEventListener('click', chooseDetachment);
-  $('#detachmentOptions').addEventListener('click', (event) => { const option = event.target.closest('[data-detachment]'); if (!option) return; state.selectedDetachment = option.dataset.detachment; state.roster.forEach((entry) => { if (!enhancementsForDetachment().some((cost) => cost.label === entry.enhancement)) entry.enhancement = ''; }); $('#detachmentDialog').close(); save(); render(); toast(`Destacamento ${state.selectedDetachment} seleccionado`); });
+  $('#detachmentOptions').addEventListener('click', (event) => {
+    if (event.target.closest('[data-clear-detachments]')) { state.selectedDetachments = []; state.roster.forEach((entry) => { entry.enhancement = ''; }); save(); render(); chooseDetachment(); return; }
+    const option = event.target.closest('[data-detachment]'); if (!option) return;
+    const name = option.dataset.detachment; const card = availableDetachments().find((item) => item.name === name); const selected = state.selectedDetachments.includes(name);
+    const next = selected ? state.selectedDetachments.filter((item) => item !== name) : [...state.selectedDetachments, name];
+    const nextDp = next.reduce((sum, item) => sum + (availableDetachments().find((entry) => entry.name === item)?.detachmentPoints || 0), 0);
+    const exception = state.battleSize <= 1000 && next.length === 1 && nextDp === 3;
+    if (!selected && nextDp > battleLimits().dp && !exception) { toast(`Ese destacamento supera el presupuesto de ${battleLimits().dp} DP.`); return; }
+    state.selectedDetachments = next;
+    state.roster.forEach((entry) => { if (!enhancementsForDetachment().some((cost) => cost.label === entry.enhancement)) entry.enhancement = ''; });
+    save(); render(); chooseDetachment(); toast(`${card.name} ${selected ? 'quitado' : 'añadido'}`);
+  });
+  $('#warlordSelect').addEventListener('change', (event) => { state.warlordId = event.target.value; save(); renderRoster(); });
+  $('#forceDisposition').addEventListener('change', (event) => { state.selectedDisposition = event.target.value; save(); renderRoster(); });
+  $('#rosterItems').addEventListener('change', (event) => { const attach = event.target.closest('[data-attach-index]'); if (attach) { const entry = state.roster[Number(attach.dataset.attachIndex)]; if (entry) { entry.attachedTo = attach.value; save(); renderRoster(); } } });
   $('#filterButton').addEventListener('click', () => toast('Elige una categoría con las pestañas del arsenal.'));
   $('#listMenuButton').addEventListener('click', exportRoster); $('#rosterMenuButton').addEventListener('click', exportRoster);
   document.addEventListener('keydown', (event) => { if (event.key === '/' && !['INPUT', 'SELECT', 'TEXTAREA'].includes(document.activeElement.tagName)) { event.preventDefault(); $('#unitSearch').focus(); } });
 }
 
 init();
-
