@@ -72,6 +72,25 @@ function selectedCost(unit, models, copyNumber) {
 
 function readUnit(unitName) { return groupedUnits().find((unit) => unit.name === unitName); }
 
+function legalModelSizes(unitName) {
+  const unit = readUnit(unitName); if (!unit) return [];
+  return [...new Set(unit.options.map((option) => option.models))].sort((a, b) => {
+    const countA = Number(a.match(/\d+/)?.[0] || 0); const countB = Number(b.match(/\d+/)?.[0] || 0);
+    return countA - countB || a.localeCompare(b, 'es');
+  });
+}
+
+function changeUnitSize(index, direction) {
+  const entry = state.roster[index]; if (!entry) return;
+  const unit = readUnit(entry.unit); const sizes = legalModelSizes(entry.unit); if (sizes.length < 2) return;
+  const currentIndex = Math.max(0, sizes.indexOf(entry.models)); const nextIndex = currentIndex + direction;
+  if (nextIndex < 0 || nextIndex >= sizes.length) return;
+  const copyNumber = state.roster.slice(0, index + 1).filter((item) => item.unit === entry.unit).length;
+  const nextSize = sizes[nextIndex]; const option = selectedCost(unit, nextSize, copyNumber);
+  entry.models = nextSize; entry.points = option?.points ?? entry.points; entry.range = option?.range ?? entry.range;
+  save(); renderRoster(); renderUnits();
+}
+
 function availableDetachments() { return state.factionCards.filter((card) => card.kind === 'detachment'); }
 
 function selectedDetachments() { return availableDetachments().filter((card) => state.selectedDetachments.includes(card.name)); }
@@ -208,7 +227,8 @@ function renderRoster() {
     const enhancementSelect = selectedDetachments().length && (canEnhance || enhancementsForDetachment().some((cost) => cost.upgrade)) ? `<select class="enhancement-select" data-enhancement-index="${index}" aria-label="Mejora para ${escapeHtml(entry.unit)}"><option value="">Sin mejora</option>${allowedEnhancements.filter((cost) => canEnhance || cost.upgrade).map((cost) => `<option value="${escapeHtml(cost.label)}" ${cost.label === entry.enhancement ? 'selected' : ''}>${escapeHtml(cost.label)} · ${numberFormat.format(cost.points)} pts</option>`).join('')}</select>` : entry.enhancement ? `<div class="roster-item-sub">${escapeHtml(entry.enhancement)} · ${numberFormat.format(enhancementCost(entry.enhancement))} pts</div>` : '';
     const meta = unitMeta(entry.unit); const targets = state.roster.filter((candidate) => candidate.id !== entry.id && !unitMeta(candidate.unit).isLeader && !unitMeta(candidate.unit).isSupport && (!meta.canJoin.length || meta.canJoin.some((name) => name.toLocaleLowerCase('es') === candidate.unit.toLocaleLowerCase('es'))));
     const attachment = (meta.isLeader || meta.isSupport) ? `<select class="attachment-select" data-attach-index="${index}" aria-label="Asignar ${escapeHtml(entry.unit)}"><option value="">${meta.isSupport ? 'Asignar unidad de apoyo…' : 'Sin unidad asignada'}</option>${targets.map((target) => `<option value="${escapeHtml(target.id)}" ${entry.attachedTo === target.id ? 'selected' : ''}>Se une a ${escapeHtml(target.unit)}</option>`).join('')}</select>` : '';
-    return `<article class="roster-item"><div class="unit-symbol ${isCharacter(entry.unit) ? 'character' : ''}">${['✣', '◉', '⌖', '✦'][index % 4]}</div><div class="roster-item-main"><div class="roster-item-title">${escapeHtml(entry.unit)}${state.warlordId === entry.id ? ' · WARLORD' : ''}</div><div class="roster-item-sub">${escapeHtml(entry.models)}${entry.range ? ` · ${escapeHtml(entry.range)}` : ''}</div>${attachment}${enhancementSelect}</div><div class="roster-item-cost">${numberFormat.format((Number(entry.points) || 0) + enhancementCost(entry.enhancement))}<small style="font:500 8px var(--font);color:#819083"> pts</small></div><button class="remove-unit" data-remove="${index}" aria-label="Quitar ${escapeHtml(entry.unit)}">×</button></article>`;
+    const modelSizes = legalModelSizes(entry.unit); const modelSizeControl = modelSizes.length > 1 ? `<div class="model-size-control"><button type="button" data-model-step="-1" data-index="${index}" aria-label="Reducir tamaÃ±o de ${escapeHtml(entry.unit)}" ${modelSizes.indexOf(entry.models) <= 0 ? 'disabled' : ''}>−</button><span>${escapeHtml(entry.models)}</span><button type="button" data-model-step="1" data-index="${index}" aria-label="Aumentar tamaÃ±o de ${escapeHtml(entry.unit)}" ${modelSizes.indexOf(entry.models) >= modelSizes.length - 1 ? 'disabled' : ''}>+</button></div>` : `<div class="roster-item-sub">${escapeHtml(entry.models)}</div>`;
+    return `<article class="roster-item"><div class="unit-symbol ${isCharacter(entry.unit) ? 'character' : ''}">${['✣', '◉', '⌖', '✦'][index % 4]}</div><div class="roster-item-main"><div class="roster-item-title">${escapeHtml(entry.unit)}${state.warlordId === entry.id ? ' · WARLORD' : ''}</div>${modelSizeControl}<div class="roster-item-sub">${entry.range ? escapeHtml(entry.range) : 'TamaÃ±o legal segÃºn el MFM'}</div>${attachment}${enhancementSelect}</div><div class="roster-item-cost">${numberFormat.format((Number(entry.points) || 0) + enhancementCost(entry.enhancement))}<small style="font:500 8px var(--font);color:#819083"> pts</small></div><button class="remove-unit" data-remove="${index}" aria-label="Quitar ${escapeHtml(entry.unit)}">×</button></article>`;
   }).join('');
   const validity = $('#validity');
   const problems = rosterProblems(); state.validationMessages = problems;
@@ -309,7 +329,10 @@ function init() {
   $('#unitSearch').addEventListener('input', (event) => { state.search = event.target.value; renderUnits(); });
   $('#categoryTabs').addEventListener('click', (event) => { const tab = event.target.closest('[data-category]'); if (!tab) return; state.category = tab.dataset.category; document.querySelectorAll('.category-tab').forEach((button) => button.classList.toggle('selected', button === tab)); renderUnits(); });
   $('#unitsList').addEventListener('click', (event) => { const button = event.target.closest('[data-add]'); if (!button) return; const card = button.closest('.unit-card'); addUnit(button.dataset.add, card.querySelector('.size-select')?.value); });
-  $('#rosterItems').addEventListener('click', (event) => { const button = event.target.closest('[data-remove]'); if (!button) return; state.roster.splice(Number(button.dataset.remove), 1); save(); renderRoster(); });
+  $('#rosterItems').addEventListener('click', (event) => {
+    const step = event.target.closest('[data-model-step]'); if (step) { changeUnitSize(Number(step.dataset.index), Number(step.dataset.modelStep)); return; }
+    const button = event.target.closest('[data-remove]'); if (!button) return; state.roster.splice(Number(button.dataset.remove), 1); save(); renderRoster(); renderUnits();
+  });
   $('#rosterItems').addEventListener('change', (event) => { const select = event.target.closest('[data-enhancement-index]'); if (!select) return; const entry = state.roster[Number(select.dataset.enhancementIndex)]; if (!entry) return; entry.enhancement = select.value; save(); renderRoster(); });
   $('#clearRoster').addEventListener('click', () => { if (!state.roster.length) return; state.roster = []; save(); renderRoster(); toast('Roster vaciado'); });
   $('#exportButton').addEventListener('click', exportRoster);
