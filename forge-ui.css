@@ -1,0 +1,122 @@
+/* Compact, high-contrast builder inspired by New Recruit's practical roster layout. */
+:root {
+  --bg: #111214;
+  --panel: #191a1d;
+  --panel-2: #202125;
+  --panel-3: #26272b;
+  --stroke: #34353a;
+  --stroke-soft: #292a2f;
+  --text: #eeeef0;
+  --muted: #a1a2a8;
+  --dim: #74767d;
+  --green: #b6ce72;
+  --green-dark: #36412b;
+  --red: #c66e69;
+  --gold: #d5b66c;
+}
+
+body { background: var(--bg); }
+.sidebar { background: #151619; border-color: var(--stroke-soft); }
+.workspace { min-width: 0; }
+.topbar { position: sticky; top: 0; z-index: 4; background: #151619; border-color: var(--stroke-soft); }
+.content-grid { max-width: 1600px; grid-template-columns: minmax(0, 1fr) 340px; gap: 18px; padding: 19px 20px 24px; }
+.builder-column { min-width: 0; }
+.page-heading { min-height: 47px; margin-bottom: 12px; align-items: center; }
+.page-heading .overline { font-size: 8px; letter-spacing: 1px; }
+.page-heading h1 { margin: 3px 0 0; font: 700 25px/1.05 var(--display); letter-spacing: .1px; }
+.heading-copy { margin-top: 3px; font-size: 10px; color: var(--muted); }
+.heading-add { padding: 8px 11px; }
+.army-card { padding: 12px 13px; border-radius: 5px; background: var(--panel); border-color: var(--stroke); box-shadow: none; }
+.army-card:after { display: none; }
+.army-card-top { padding-bottom: 9px; gap: 9px; border-color: var(--stroke-soft); }
+.faction-emblem { width: 30px; height: 30px; border-radius: 4px; background: #2a2525; border-color: #504040; font-size: 14px; }
+.army-title-block label, .control-group > span { font-size: 8px; letter-spacing: .8px; }
+.army-title-block input { padding: 2px 0; font: 600 17px var(--display); }
+.army-controls { grid-template-columns: minmax(170px, 1.25fr) minmax(165px, 1fr) minmax(180px, 1.15fr); gap: 9px; padding-top: 10px; }
+.control-group { gap: 5px; }
+.control-group select, .detachment-select { min-height: 34px; padding: 0 9px; border: 1px solid var(--stroke); border-radius: 3px; background: #151619; color: var(--text); font-size: 10px; }
+.detachment-select { text-align: left; }
+.detachment-select span { float: right; color: var(--muted); }
+.detachment-summary { margin: 7px 0 12px; padding: 9px 11px; border-radius: 3px; background: #1d211c; border-color: #3d4935; }
+.detachment-summary-head { font-size: 10px; }
+.detachment-summary p { font-size: 9px; }
+.section-heading { margin: 15px 0 8px; align-items: end; }
+.section-heading h2, .roster-header h2 { margin: 3px 0 0; font: 700 19px/1.1 var(--display); }
+.overline, .muted-overline { font-size: 8px; letter-spacing: .9px; }
+.unit-tools { gap: 6px; }
+.search-box { height: 33px; border: 1px solid var(--stroke); border-radius: 3px; background: #17181b; }
+.search-box input { font-size: 10px; }
+.search-box kbd { border: 0; background: none; }
+.filter-button { height: 33px; border: 1px solid var(--stroke); border-radius: 3px; background: #202125; font-size: 9px; }
+.category-tabs { gap: 4px; border-bottom: 1px solid var(--stroke); }
+.category-tab { padding: 8px 10px; border: 0; border-bottom: 2px solid transparent; color: var(--muted); font-size: 9px; }
+.category-tab.selected { border-color: var(--red); color: var(--text); }
+.category-note { margin-left: auto; font-size: 9px; }
+.units-list { gap: 0; border-top: 0; }
+.unit-card { min-height: 53px; grid-template-columns: 28px minmax(130px, 1fr) 55px 86px 28px; gap: 9px; padding: 7px 8px; border: 0; border-bottom: 1px solid var(--stroke-soft); border-radius: 0; background: transparent; }
+.unit-card:hover { border-color: var(--stroke-soft); background: #1b1c20; }
+.unit-symbol { width: 26px; height: 26px; border-radius: 3px; background: #242529; color: #a4a5aa; }
+.unit-symbol.character { background: #332424; color: #d8918b; }
+.unit-name { font-size: 10px; line-height: 1.3; }
+.unit-meta { gap: 6px; margin-top: 3px; font-size: 8px; }
+.role-tag { padding: 2px 4px; border-radius: 2px; background: #242529; color: #a6a7ad; font-size: 7px; }
+.unit-point { color: #d98c85; font: 600 14px var(--display); }
+.unit-point small { margin-left: 3px; color: var(--muted); font: 500 8px var(--font); }
+.size-select { min-height: 27px; padding: 0 5px; border: 1px solid var(--stroke); border-radius: 3px; background: #151619; font-size: 8px; }
+.add-unit { width: 27px; height: 27px; border: 1px solid #51413f; border-radius: 3px; background: #2a2222; color: #e0a19b; font-size: 16px; }
+.add-unit:hover { border-color: var(--red); background: #392827; }
+.data-note { margin-top: 13px; padding: 9px 10px; border: 1px solid var(--stroke-soft); border-radius: 3px; background: #17181b; }
+.data-note p { font-size: 9px; }
+.roster-panel { position: sticky; top: 76px; align-self: start; height: calc(100vh - 92px); min-height: 420px; max-height: 900px; border: 1px solid var(--stroke); border-radius: 4px; background: #18191c; box-shadow: none; }
+.roster-header { padding: 12px 13px 10px; border-color: var(--stroke-soft); }
+.roster-header h2 { font-size: 20px; }
+.points-summary { margin: 0; padding: 11px 13px 10px; border-radius: 0; background: #202125; border-bottom: 1px solid var(--stroke); }
+.points-label { font-size: 8px; }
+.points-value { margin-top: 3px; font: 700 29px/1 var(--display); }
+.points-value small { font-size: 12px; }
+.points-track { height: 4px; margin-top: 9px; border-radius: 1px; background: #35363b; }
+.points-track span { background: var(--green); }
+.points-meta { margin-top: 6px; font-size: 8px; }
+.roster-section-title { padding: 10px 13px 6px; font-size: 8px; }
+.roster-items { padding: 0 9px; }
+.roster-item { grid-template-columns: 25px minmax(0, 1fr) auto; gap: 7px; padding: 8px 3px; border-color: var(--stroke-soft); }
+.roster-item-title { font-size: 9px; }
+.roster-item-sub { font-size: 8px; }
+.roster-item-cost { color: #d98c85; font: 600 13px var(--display); }
+.enhancement-select { min-height: 28px; background: #151619; font-size: 9px; }
+.remove-unit { opacity: 1; position: static; grid-column: 1 / -1; justify-self: end; margin-top: -3px; font-size: 14px; }
+.roster-empty { padding: 23px 12px; }
+.roster-empty strong { font-size: 10px; }
+.roster-empty p { font-size: 9px; }
+.roster-bottom { padding: 10px 12px; border-color: var(--stroke); background: #18191c; }
+.roster-validity { font-size: 9px; }
+.export-button { height: 34px; border-radius: 3px; background: #b8cf74; }
+.detachment-dialog { background: #191a1d; border-color: var(--stroke); }
+.detachment-option { border-radius: 3px; background: #202125; }
+.detachment-option:hover, .detachment-option.selected { border-color: var(--red); background: #292021; }
+.detachment-option b { color: #d98c85; }
+.help-dialog::backdrop { background: #000b; backdrop-filter: blur(2px); }
+.toast { border-radius: 3px; }
+
+@media (max-width: 1100px) {
+  .content-grid { grid-template-columns: minmax(0, 1fr) 300px; gap: 12px; padding: 14px; }
+  .army-controls { grid-template-columns: 1fr 1fr; }
+  .detachment-control { grid-column: 1 / -1; }
+}
+@media (max-width: 850px) {
+  .content-grid { grid-template-columns: minmax(0, 1fr); }
+  .roster-panel { position: relative; top: auto; width: 100%; height: auto; min-height: 380px; max-height: none; grid-row: 2; }
+}
+@media (max-width: 600px) {
+  .content-grid { padding: 12px 10px 20px; gap: 13px; }
+  .page-heading { min-height: 42px; margin-bottom: 8px; }
+  .page-heading h1 { font-size: 22px; }
+  .heading-copy { display: none; }
+  .army-controls { grid-template-columns: 1fr 1fr; gap: 7px; }
+  .detachment-control { grid-column: 1 / -1; }
+  .unit-card { grid-template-columns: 25px minmax(0, 1fr) 44px 68px 27px; gap: 5px; padding: 7px 3px; }
+  .unit-meta { flex-wrap: wrap; }
+  .section-heading { gap: 8px; }
+  .section-heading h2 { font-size: 18px; }
+}
+
