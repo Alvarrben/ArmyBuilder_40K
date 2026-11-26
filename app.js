@@ -261,7 +261,7 @@ function setData(text, source, factionCards = []) {
   state.selectedDetachments = state.selectedDetachments.filter((name) => availableDetachments().some((card) => card.name === name));
   state.roster.forEach((entry) => { if (!enhancementsForDetachment().some((cost) => cost.label === entry.enhancement)) entry.enhancement = ''; });
   render(); save();
-  $('#sourceText').textContent = `Puntos de unidad desde ${source.label}. La extracción completa incluye wargear, mejoras y destacamentos en data/mfm-snapshot.json y data/mfm-points.csv.`;
+  $('#sourceText').textContent = `Puntos cargados desde ${source.label}. El MFM aporta costes, DP, mejoras y compatibilidad de unión, pero no todos los keywords (BATTLELINE, Dedicated Transport, EPIC HERO) ni el texto completo de restricciones de destacamento; confirma esos casos con las reglas de facción.`;
   toast(`Catálogo cargado: ${numberFormat.format(normalized.length)} entradas`);
 }
 
