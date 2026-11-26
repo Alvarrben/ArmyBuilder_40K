@@ -10,7 +10,7 @@
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@500;600;700;800&family=DM+Sans:wght@400;500;600;700&display=swap" rel="stylesheet" />
     <link rel="stylesheet" href="./styles.css" />
-    <link rel="stylesheet" href="./forge-ui.css?v=3" />
+    <link rel="stylesheet" href="./forge-ui.css?v=4" />
   </head>
   <body>
     <div class="app-shell">
@@ -54,6 +54,6 @@
     <dialog id="detachmentDialog" class="help-dialog detachment-dialog"><form method="dialog"><button class="dialog-close" aria-label="Cerrar">×</button><div class="overline">REGLAS DE EJÉRCITO</div><h2>Elige destacamentos</h2><p>Selecciona uno o varios sin superar el presupuesto de DP. En Incursion se permite un único destacamento de 3 DP.</p><div id="detachmentOptions" class="detachment-options"></div><button class="outline-button dialog-cancel">Terminar</button></form></dialog>
     <dialog id="importDialog" class="help-dialog import-dialog"><form method="dialog"><button class="dialog-close" aria-label="Cerrar">×</button><div class="overline">CATÁLOGO DE PUNTOS</div><h2>Actualizar datos</h2><p>El scraper consulta directamente el <a href="https://mfm.warhammer-community.com/en" target="_blank" rel="noreferrer">MFM oficial</a>. Genera o sustituye el snapshot local y luego cárgalo aquí.</p><div class="import-actions"><button class="primary-button" id="updateMfmButton" type="button">↻ Cargar snapshot local</button><button class="outline-button" id="localImportButton" type="button">⇧ Importar CSV</button></div><small>Para actualizarlo: <code>node scripts/scrape-mfm.mjs</code>. La exportación conserva fuente, versión y fecha de extracción.</small></form></dialog>
     <dialog id="helpDialog" class="help-dialog"><form method="dialog"><button class="dialog-close" aria-label="Cerrar">×</button><div class="overline">PRIMEROS PASOS</div><h2>Tu mesa de mando</h2><p>Busca una unidad y añádela al roster. El total se recalcula al instante y tu lista se guarda en este navegador.</p><p>El catálogo inicial es una muestra. Pulsa el icono de importación para cargar un CSV de puntos o intenta actualizarlo desde el repositorio de datos MFM. Comprueba siempre la versión contra el manual oficial antes de jugar.</p><button class="primary-button">Entendido</button></form></dialog>
-    <script src="./app.js?v=army-rules-3" defer></script>
+    <script src="./app.js?v=army-rules-4" defer></script>
   </body>
 </html>
