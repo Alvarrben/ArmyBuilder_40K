@@ -10,6 +10,7 @@
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@500;600;700;800&family=DM+Sans:wght@400;500;600;700&display=swap" rel="stylesheet" />
     <link rel="stylesheet" href="./styles.css" />
+    <link rel="stylesheet" href="./forge-ui.css?v=2" />
   </head>
   <body>
     <div class="app-shell">
@@ -32,7 +33,7 @@
         <header class="topbar"><div class="breadcrumbs"><span>WARHAMMER 40,000</span><span class="crumb-slash">/</span><strong>CONSTRUCTOR DE EJÉRCITO</strong></div><div class="top-actions"><span class="edition-pill">11.ª EDICIÓN</span><button class="icon-button" id="importButton" title="Importar datos MFM" aria-label="Importar datos">⇧</button><button class="avatar" title="Perfil local">A</button></div></header>
         <div class="content-grid">
           <section class="builder-column">
-            <div class="page-heading"><div><div class="overline"><span class="red-line"></span> PLANIFICADOR DE BATALLA</div><h1>Construye tu ejército<span class="title-period">.</span></h1><p class="heading-copy">Prepara tu fuerza, controla los puntos y deja que la batalla empiece.</p></div><button class="primary-button heading-add" id="topAddButton"><span>＋</span> Añadir unidad</button></div>
+            <div class="page-heading"><div><div class="overline"><span class="red-line"></span> CONSTRUCTOR · 11.ª EDICIÓN</div><h1>Arsenal<span class="title-period">.</span></h1><p class="heading-copy">Busca unidades, revisa sus puntos y añádelas a tu roster.</p></div><button class="primary-button heading-add" id="topAddButton"><span>＋</span> Añadir unidad</button></div>
             <section class="army-card"><div class="army-card-top"><div class="faction-emblem">☠</div><div class="army-title-block"><label for="listName">NOMBRE DE LA LISTA</label><input id="listName" value="La Decimotercera" maxlength="48" /></div><button class="dots-button" id="listMenuButton" aria-label="Opciones de lista">•••</button></div><div class="army-controls"><label class="control-group"><span>FACCIÓN</span><select id="factionSelect" aria-label="Seleccionar facción"></select></label><label class="control-group"><span>TAMAÑO DE BATALLA</span><select id="battleSize"><option value="1000">Incursion · 1.000 pts</option><option value="2000" selected>Strike Force · 2.000 pts</option></select></label><label class="control-group detachment-control"><span>DESTACAMENTO</span><button id="detachmentButton" class="detachment-select">Seleccionar destacamento <span>⌄</span></button></label></div></section>
 
             <div class="detachment-summary" id="detachmentSummary" hidden></div>
@@ -52,7 +53,7 @@
     <dialog id="detachmentDialog" class="help-dialog detachment-dialog"><form method="dialog"><button class="dialog-close" aria-label="Cerrar">×</button><div class="overline">REGLAS DE EJÉRCITO</div><h2>Elige destacamento</h2><p>Los DP son el coste de destacamento y se muestran aparte del límite de puntos del ejército.</p><div id="detachmentOptions" class="detachment-options"></div><button class="outline-button dialog-cancel">Cancelar</button></form></dialog>
     <dialog id="importDialog" class="help-dialog import-dialog"><form method="dialog"><button class="dialog-close" aria-label="Cerrar">×</button><div class="overline">CATÁLOGO DE PUNTOS</div><h2>Actualizar datos</h2><p>El scraper consulta directamente el <a href="https://mfm.warhammer-community.com/en" target="_blank" rel="noreferrer">MFM oficial</a>. Genera o sustituye el snapshot local y luego cárgalo aquí.</p><div class="import-actions"><button class="primary-button" id="updateMfmButton" type="button">↻ Cargar snapshot local</button><button class="outline-button" id="localImportButton" type="button">⇧ Importar CSV</button></div><small>Para actualizarlo: <code>node scripts/scrape-mfm.mjs</code>. La exportación conserva fuente, versión y fecha de extracción.</small></form></dialog>
     <dialog id="helpDialog" class="help-dialog"><form method="dialog"><button class="dialog-close" aria-label="Cerrar">×</button><div class="overline">PRIMEROS PASOS</div><h2>Tu mesa de mando</h2><p>Busca una unidad y añádela al roster. El total se recalcula al instante y tu lista se guarda en este navegador.</p><p>El catálogo inicial es una muestra. Pulsa el icono de importación para cargar un CSV de puntos o intenta actualizarlo desde el repositorio de datos MFM. Comprueba siempre la versión contra el manual oficial antes de jugar.</p><button class="primary-button">Entendido</button></form></dialog>
-    <script src="./app.js" defer></script>
+    <script src="./app.js?v=detachment-ui-2" defer></script>
   </body>
 </html>
 
